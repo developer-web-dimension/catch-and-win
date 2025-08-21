@@ -59,10 +59,40 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
 
+        .score-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
         .score {
             font-size: 24px;
             font-weight: bold;
             color: #8B4513;
+            margin-bottom: 5px;
+        }
+
+        .stage-info {
+            font-size: 16px;
+            color: #2F4F4F;
+            font-weight: bold;
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 10px;
+            background: rgba(139, 69, 19, 0.3);
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #32CD32, #228B22);
+            border-radius: 5px;
+            transition: width 0.3s ease;
+            width: 0%;
         }
 
         .status {
@@ -136,17 +166,33 @@
             background: rgba(255, 99, 71, 0.8);
             color: white;
         }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
     <div class="instructions">
-        <h2>🍪 Cookie Catcher Game 🍪</h2>
+        <h2>Cookie Catcher Game</h2>
         <p>Open your mouth to catch falling cookies! Make sure your mouth is clearly open to score points.</p>
-        <p>Allow camera access and click Start Game when ready.</p>
     </div>
 
     <div class="ui">
-        <div class="score">Score: <span id="scoreValue">0</span></div>
+        <div class="score-info">
+            <div class="score">Score: <span id="scoreValue">0</span></div>
+            <div class="stage-info">
+                Stage <span id="currentStage">1</span> - Target: <span id="stageTarget">10</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="lives-info" style="font-size: 14px; color: #DC143C; font-weight: bold; margin-top: 5px;">
+                Lives: <span id="livesRemaining">15</span> cookies left
+            </div>
+        </div>
         <button id="startBtn" class="start-btn">Start Game</button>
         <div class="status" id="status">Loading...</div>
     </div>
@@ -167,6 +213,10 @@
                 this.statusElement = document.getElementById('status');
                 this.startBtn = document.getElementById('startBtn');
                 this.mouthIndicator = document.getElementById('mouthIndicator');
+                this.currentStageElement = document.getElementById('currentStage');
+                this.stageTargetElement = document.getElementById('stageTarget');
+                this.progressFillElement = document.getElementById('progressFill');
+                this.livesRemainingElement = document.getElementById('livesRemaining');
                 
                 this.score = 0;
                 this.gameRunning = false;
@@ -175,6 +225,23 @@
                 this.isMouthOpen = false;
                 this.faceMesh = null;
                 this.camera = null;
+                this.droppedCookies = 0;
+                this.maxDroppedCookies = 15;
+                
+                // Staging system
+                this.currentStage = 1;
+                this.maxStage = 5;
+                this.stageProgress = 0;
+                this.baseSpawnRate = 1500;
+                
+                // Stage configuration: [target cookies, fixed speed, spawn rate multiplier, cookies per spawn]
+                this.stageConfig = {
+                    1: { target: 10, speed: 2.0, spawnMultiplier: 1.0, cookiesPerSpawn: 1 },
+                    2: { target: 15, speed: 3.0, spawnMultiplier: 0.8, cookiesPerSpawn: 2 },
+                    3: { target: 20, speed: 4.5, spawnMultiplier: 0.6, cookiesPerSpawn: 2 },
+                    4: { target: 25, speed: 6.0, spawnMultiplier: 0.5, cookiesPerSpawn: 3 },
+                    5: { target: 30, speed: 8.0, spawnMultiplier: 0.4, cookiesPerSpawn: 3 }
+                };
                 
                 // Cookie image path - replace this with your PNG file path
                 this.cookieImagePath = 'static/cookies.png'; // UPDATE THIS PATH
@@ -299,7 +366,7 @@
 
             updateMouthIndicator() {
                 if (this.isMouthOpen) {
-                    this.mouthIndicator.textContent = "Mouth Open! ";
+                    this.mouthIndicator.textContent = "Mouth Open!";
                     this.mouthIndicator.className = "mouth-indicator mouth-open";
                 } else {
                     this.mouthIndicator.textContent = "Mouth Closed";
@@ -366,8 +433,11 @@
 
                 this.gameRunning = true;
                 this.score = 0;
+                this.currentStage = 1;
+                this.stageProgress = 0;
+                this.droppedCookies = 0;
                 this.cookies = [];
-                this.scoreElement.textContent = this.score;
+                this.updateUI();
                 this.startBtn.textContent = "Stop Game";
                 this.startBtn.style.background = "#DC143C";
                 
@@ -376,7 +446,7 @@
                 }
                 
                 this.spawnCookies();
-                this.statusElement.textContent = "Game started! Catch cookies!";
+                this.statusElement.textContent = "Game started! Catch cookies to advance!";
             }
 
             stopGame() {
@@ -384,7 +454,72 @@
                 this.clearCookies();
                 this.startBtn.textContent = "Start Game";
                 this.startBtn.style.background = "#32CD32";
-                this.statusElement.textContent = `Game over! Final score: ${this.score}`;
+                this.statusElement.textContent = `Game over! Final score: ${this.score} (Stage ${this.currentStage})`;
+            }
+
+            updateUI() {
+                this.scoreElement.textContent = this.score;
+                this.currentStageElement.textContent = this.currentStage;
+                this.stageTargetElement.textContent = this.stageConfig[this.currentStage].target;
+                this.livesRemainingElement.textContent = this.maxDroppedCookies - this.droppedCookies;
+                
+                // Update progress bar
+                const progressPercent = (this.stageProgress / this.stageConfig[this.currentStage].target) * 100;
+                this.progressFillElement.style.width = Math.min(progressPercent, 100) + '%';
+                
+                // Change lives color based on remaining lives
+                const livesRemaining = this.maxDroppedCookies - this.droppedCookies;
+                if (livesRemaining <= 5) {
+                    this.livesRemainingElement.style.color = '#FF0000'; // Red when low
+                } else if (livesRemaining <= 10) {
+                    this.livesRemainingElement.style.color = '#FF8C00'; // Orange when medium
+                } else {
+                    this.livesRemainingElement.style.color = '#32CD32'; // Green when high
+                }
+            }
+
+            checkStageProgression() {
+                const currentStageConfig = this.stageConfig[this.currentStage];
+                
+                if (this.stageProgress >= currentStageConfig.target) {
+                    if (this.currentStage < this.maxStage) {
+                        // Advance to next stage
+                        this.currentStage++;
+                        this.stageProgress = 0;
+                        this.updateUI();
+                        this.showStageAdvancement();
+                    } else {
+                        // Game completed!
+                        this.gameCompleted();
+                    }
+                }
+            }
+
+            showStageAdvancement() {
+                const currentConfig = this.stageConfig[this.currentStage];
+                this.statusElement.textContent = `🎉 STAGE ${this.currentStage}! Speed: ${currentConfig.speed}px/frame! ${currentConfig.cookiesPerSpawn} cookies per spawn! Target: ${currentConfig.target}`;
+                
+                // Flash the stage info
+                this.currentStageElement.parentElement.style.animation = 'none';
+                setTimeout(() => {
+                    this.currentStageElement.parentElement.style.animation = 'pulse 0.6s ease-in-out';
+                }, 10);
+            }
+
+            gameCompleted() {
+                this.gameRunning = false;
+                this.clearCookies();
+                this.statusElement.textContent = `🏆 CONGRATULATIONS! You completed all 5 stages! Final score: ${this.score}`;
+                this.startBtn.textContent = "Play Again";
+                this.startBtn.style.background = "#FFD700";
+            }
+
+            gameOver() {
+                this.gameRunning = false;
+                this.clearCookies();
+                this.statusElement.textContent = `💥 GAME OVER! You dropped ${this.maxDroppedCookies} cookies. Final score: ${this.score} (Stage ${this.currentStage})`;
+                this.startBtn.textContent = "Try Again";
+                this.startBtn.style.background = "#FF4500";
             }
 
             clearCookies() {
@@ -399,20 +534,36 @@
             spawnCookies() {
                 if (!this.gameRunning) return;
 
-                // Create new cookie
-                const cookie = {
-                    x: Math.random() * (this.canvas.width - 80) + 10,
-                    y: -70,
-                    speed: 2 + Math.random() * 2,
-                    element: this.createCookieElement()
-                };
+                const currentConfig = this.stageConfig[this.currentStage];
                 
-                this.cookies.push(cookie);
+                // All cookies in the same stage have the same fixed speed
+                const cookieSpeed = currentConfig.speed;
+                const cookiesPerSpawn = currentConfig.cookiesPerSpawn;
 
-                // Schedule next cookie spawn
+                // Create multiple cookies based on stage
+                for (let i = 0; i < cookiesPerSpawn; i++) {
+                    // Add some spacing between multiple cookies spawned at once
+                    const spawnDelay = i * 200; // 200ms delay between each cookie in a batch
+                    
+                    setTimeout(() => {
+                        if (!this.gameRunning) return; // Check if game is still running
+                        
+                        const cookie = {
+                            x: Math.random() * (this.canvas.width - 80) + 10,
+                            y: -70,
+                            speed: cookieSpeed, // Fixed speed for all cookies in this stage
+                            element: this.createCookieElement()
+                        };
+                        
+                        this.cookies.push(cookie);
+                    }, spawnDelay);
+                }
+
+                // Schedule next cookie spawn batch with stage-based spawn rate
+                const spawnDelay = this.baseSpawnRate * currentConfig.spawnMultiplier + (Math.random() * 500);
                 setTimeout(() => {
                     this.spawnCookies();
-                }, 1000 + Math.random() * 1500);
+                }, spawnDelay);
             }
 
             createCookieElement() {
@@ -445,7 +596,9 @@
                     // Check for mouth collision
                     if (this.isMouthOpen && this.checkCookieCollision(cookie)) {
                         this.score++;
-                        this.scoreElement.textContent = this.score;
+                        this.stageProgress++;
+                        this.updateUI();
+                        this.checkStageProgression();
                         
                         // Remove cookie element
                         if (cookie.element && cookie.element.parentNode) {
@@ -457,6 +610,15 @@
 
                     // Remove cookies that have fallen off screen
                     if (cookie.y > this.canvas.height + 50) {
+                        this.droppedCookies++;
+                        this.updateUI();
+                        
+                        // Check if game over due to too many dropped cookies
+                        if (this.droppedCookies >= this.maxDroppedCookies) {
+                            this.gameOver();
+                            return;
+                        }
+                        
                         if (cookie.element && cookie.element.parentNode) {
                             cookie.element.parentNode.removeChild(cookie.element);
                         }
@@ -473,8 +635,8 @@
                 if (!mouthCenter) return false;
 
                 // Calculate distance between cookie center and mouth center
-                const cookieCenterX = cookie.x + 10; // Cookie width/2 (60px/2)
-                const cookieCenterY = cookie.y + 10; // Cookie height/2 (60px/2)
+                const cookieCenterX = cookie.x + 40; // Cookie width/2 (80px/2)
+                const cookieCenterY = cookie.y + 40; // Cookie height/2 (80px/2)
                 
                 const distance = Math.sqrt(
                     Math.pow(cookieCenterX - mouthCenter.x, 2) + 
