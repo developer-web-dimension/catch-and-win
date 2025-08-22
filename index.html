@@ -8,6 +8,12 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js">
+    <link rel="preload" as="fetch" type="application/octet-stream" crossorigin
+        href="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh_solution_packed_assets.data">
+    <link rel="preload" as="fetch" type="application/wasm" crossorigin
+        href="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh_solution_wasm_bin.wasm">
+
     <style>
         body {
             margin: 0;
@@ -141,8 +147,8 @@
 
         .cookie {
             position: absolute;
-            width: 80px;
-            height: 80px;
+            width: 120px;
+            height: 120px;
             z-index: 10;
             transition: all 0.1s ease;
             background-size: contain;
@@ -353,7 +359,7 @@
 
                     this.faceMesh.setOptions({
                         maxNumFaces: 1,
-                        refineLandmarks: true,
+                        refineLandmarks: false,
                         minDetectionConfidence: 0.7,
                         minTrackingConfidence: 0.7
                     });
@@ -690,8 +696,8 @@
                 if (!mouthCenter) return false;
 
                 // Calculate distance between cookie center and mouth center
-                const cookieCenterX = cookie.x + 10; // Cookie width/2 (80px/2)
-                const cookieCenterY = cookie.y + 10; // Cookie height/2 (80px/2)
+                const cookieCenterX = cookie.x + 40; // Cookie width/2 (80px/2)
+                const cookieCenterY = cookie.y + 40; // Cookie height/2 (80px/2)
                 
                 const distance = Math.sqrt(
                     Math.pow(cookieCenterX - mouthCenter.x, 2) + 
