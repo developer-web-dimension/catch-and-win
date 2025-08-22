@@ -21,21 +21,25 @@
         }
 
         .game-container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            border: 4px solid #8B4513;
-            border-radius: 15px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
-            background: #87CEEB;
+            z-index: 0;
+            background: black;
         }
 
         #videoElement {
             position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transform: scaleX(-1);
+            transform: scaleX(-1); /* Mirror for selfie view */
+            z-index: 0;
         }
 
         #canvas {
@@ -45,19 +49,44 @@
             width: 100%;
             height: 100%;
             pointer-events: none;
+            z-index: 1;
         }
 
-        .ui {
+
+       .ui {
+            position: fixed;
+            top: 15px;
+            left: 15px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 640px;
-            margin-bottom: 20px;
+            flex-direction: column; /* stack items vertically */
+            align-items: flex-start; /* align items to the left */
+            gap: 10px; /* spacing between elements */
+            width: auto; /* shrink to fit content */
+            max-width: 250px; /* prevent it from being too wide */
             background: rgba(255, 255, 255, 0.9);
-            padding: 15px;
+            padding: 12px;
             border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 10;
         }
+
+        /* Responsive: shrink width on smaller screens */
+        @media (max-width: 768px) {
+            .ui {
+                width: 180px;
+                padding: 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .ui {
+                width: 150px;
+                padding: 10px;
+                font-size: 0.9rem;
+            }
+        }
+
+
 
         .score-info {
             display: flex;
@@ -148,7 +177,7 @@
         .mouth-indicator {
             position: absolute;
             top: 10px;
-            left: 10px;
+            right: 10px;
             padding: 8px 16px;
             border-radius: 20px;
             font-weight: bold;
@@ -172,12 +201,31 @@
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
         }
+
+        @keyframes spin {
+            0% { transform:rotate(0deg); }
+            100% { transform:rotate(360deg); }
+        }
+
     </style>
 </head>
 <body>
     <div class="instructions">
-        <h2>Cookie Catcher Game</h2>
-        <p>Open your mouth to catch falling cookies! Make sure your mouth is clearly open to score points.</p>
+        <div id="loadingScreen" style="
+            position: fixed;
+            top:0; left:0;
+            width:100%; height:100%;
+            background: linear-gradient(135deg, #87CEEB, #98FB98);
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            align-items:center;
+            z-index:1000;
+            font-family: Arial, sans-serif;">
+            <h1 style="color:#8B4513; margin-bottom:20px;">Loading Cookie Catcher...</h1>
+            <div style="border:6px solid #f3f3f3; border-top:6px solid #8B4513; border-radius:50%; width:60px; height:60px; animation:spin 1s linear infinite;"></div>
+        </div>
+
     </div>
 
     <div class="ui">
@@ -193,7 +241,7 @@
                 Lives: <span id="livesRemaining">15</span> cookies left
             </div>
         </div>
-        <button id="startBtn" class="start-btn">Start Game</button>
+        <button id="startBtn" class="start-btn" style="display:none;">Start Game</button>
         <div class="status" id="status">Loading...</div>
     </div>
 
@@ -252,6 +300,7 @@
                     lowerLip: [404, 405, 320, 307, 375, 321],
                     innerMouth: [78, 81, 13, 311, 308, 415, 324, 318]
                 };
+                this.startBtn.disabled = true;
                 
                 this.init();
             }
@@ -263,6 +312,12 @@
                 await this.setupFaceMesh();
                 this.setupEventListeners();
                 this.resizeCanvas();
+                this.startBtn.disabled = false;
+
+
+                document.getElementById("loadingScreen").style.display = "none";
+                this.startBtn.style.display = "inline-block";
+
                 this.statusElement.textContent = "Ready! Click Start Game";
             }
 
