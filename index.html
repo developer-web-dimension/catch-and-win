@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie Catcher Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js">
+    <link rel="preload" as="fetch" type="application/octet-stream" crossorigin
+        href="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh_solution_packed_assets.data">
+    <link rel="preload" as="fetch" type="application/wasm" crossorigin
+        href="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh_solution_wasm_bin.wasm">
+
+      <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #87CEEB, #98FB98);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+            background: black;
+        }
+
+        #videoElement {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror for selfie view */
+            z-index: 0;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Score and Stage Info - Top Left */
+        .score-stage-info {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(139, 69, 19, 0.2);
+        }
+
+        .score {
+            font-size: 28px;
+            font-weight: bold;
+            color: #8B4513;
+            margin-bottom: 8px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .stage-info {
+            font-size: 16px;
+            color: #2F4F4F;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 12px;
+            background: rgba(139, 69, 19, 0.3);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid rgba(139, 69, 19, 0.4);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #32CD32, #228B22);
+            border-radius: 5px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .lives-info {
+            font-size: 14px;
+            color: #DC143C;
+            font-weight: bold;
+            margin-top: 8px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* Start Button - Bottom Center */
+        .start-button-container {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        .start-btn {
+            background: linear-gradient(45deg, #32CD32, #228B22);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            min-width: 160px;
+        }
+
+        .start-btn:hover {
+            background: linear-gradient(45deg, #228B22, #32CD32);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        .start-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Game Info Modal - Center Screen */
+        .game-info-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            z-index: 15;
+            backdrop-filter: blur(15px);
+            border: 3px solid rgba(139, 69, 19, 0.3);
+            max-width: 400px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .status-text {
+            font-size: 18px;
+            color: #2F4F4F;
+            font-weight: bold;
+            margin-bottom: 15px;
+            line-height: 1.4;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .game-instructions {
+            font-size: 14px;
+            color: #555;
+            margin-top: 10px;
+            line-height: 1.5;
+        }
+
+        /* Mouth Indicator - Top Right */
+        .mouth-indicator {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            z-index: 20;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255,255,255,0.3);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .mouth-open {
+            background: linear-gradient(45deg, rgba(50, 205, 50, 0.9), rgba(34, 139, 34, 0.9));
+            color: white;
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        .mouth-closed {
+            background: linear-gradient(45deg, rgba(255, 99, 71, 0.9), rgba(220, 20, 60, 0.9));
+            color: white;
+        }
+
+        .instructions {
+            max-width: 640px;
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .cookie {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            z-index: 10;
+            transition: all 0.1s ease;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        /* Loading Screen */
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #87CEEB, #98FB98);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-family: Arial, sans-serif;
+        }
+
+        .loading-title {
+            color: #8B4513;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .loading-spinner {
+            /* border: 6px solid #f3f3f3;
+            border-top: 6px solid #8B4513;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px; */
+            animation: spin 1s linear infinite;
+        }
+
+        /* Company Logo - Bottom Right */
+        .company-logo {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 16px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .company-logo img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+        }
+
+        .company-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .powered-by {
+            font-size: 10px;
+            font-weight: normal;
+            color: #666;
+            text-shadow: none;
+            margin-bottom: 2px;
+        }
+
+        .company-name {
+            font-size: 14px;
+            font-weight: bold;
+            color: #000;
+            text-shadow: none;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .score-stage-info {
+                top: 10px;
+                left: 10px;
+                padding: 12px;
+            }
+            
+            .score {
+                font-size: 24px;
+            }
+            
+            .progress-bar {
+                width: 160px;
+            }
+            
+            .start-btn {
+                padding: 14px 28px;
+                font-size: 18px;
+                min-width: 140px;
+            }
+            
+            .game-info-modal {
+                max-width: 320px;
+                padding: 20px;
+            }
+            
+            .mouth-indicator {
+                top: 10px;
+                right: 10px;
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+            
+            .company-logo {
+                bottom: 10px;
+                right: 10px;
+                padding: 10px 12px;
+            }
+            
+            .company-logo img {
+                width: 28px;
+                height: 28px;
+            }
+            
+            .company-name {
+                font-size: 12px;
+            }
+            
+            .powered-by {
+                font-size: 9px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .score-stage-info {
+                padding: 10px;
+            }
+            
+            .score {
+                font-size: 22px;
+            }
+            
+            .progress-bar {
+                width: 140px;
+            }
+            
+            .start-btn {
+                padding: 12px 24px;
+                font-size: 16px;
+                min-width: 120px;
+            }
+            
+            .game-info-modal {
+                max-width: 280px;
+                padding: 15px;
+            }
+            
+            .status-text {
+                font-size: 16px;
+            }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+</head>
+<body>
+    <!-- Loading Screen -->
+   <div id="loadingScreen">
+    <h1 class="loading-title">Loading Catch & Win Catcher...</h1>
+    <img src="./static/cookies.png" alt="Catch & Win Arcade" class="loading-spinner" style="max-width: 80%; height: auto; margin-bottom: 20px;">
+    <h1 class="loading-title">Jonny Jonny, Yes Papa! Open Your Mouth, Kha kha kha!🤩🤩🤩 :D</h1>
+    <!-- <div class="loading-spinner"></div> -->
+    </div>
+
+    <!-- Score and Stage Info - Top Left -->
+    <div class="score-stage-info">
+        <div class="score">Score: <span id="scoreValue">0</span></div>
+        <div class="stage-info">
+            Stage <span id="currentStage">1</span> - Target: <span id="stageTarget">10</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="lives-info" id="livesInfo">
+            Lives: <span id="livesRemaining">15</span> cookies left
+        </div>
+    </div>
+
+    <!-- Start Button - Bottom Center -->
+    <div class="start-button-container">
+        <button id="startBtn" class="start-btn" style="display:none;">Start Game</button>
+    </div>
+
+    <!-- Game Info Modal - Center Screen -->
+    <div class="game-info-modal" id="gameInfoModal">
+        <div class="status-text" id="status">Loading...</div>
+        <div class="game-instructions" id="gameInstructions">
+            Open your mouth to catch falling cookies! Complete each stage by reaching the target score.
+        </div>
+    </div>
+
+    <!-- Company Logo - Bottom Right -->
+    <div class="company-logo">
+        <img src="./static/logowithoutbg.png" alt="Company Logo" id="companyLogo">
+        <div class="company-text">
+            <span class="powered-by">Powered By</span>
+            <span class="company-name" id="companyName">Web Dimension</span>
+        </div>
+    </div>
+
+    <!-- Game Container -->
+    <div class="game-container">
+        <video id="videoElement" autoplay muted playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div id="mouthIndicator" class="mouth-indicator mouth-closed">Mouth Closed</div>
+    </div>
+
+    <script>
+        class CookieCatcherGame {
+            constructor() {
+                this.video = document.getElementById('videoElement');
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.scoreElement = document.getElementById('scoreValue');
+                this.statusElement = document.getElementById('status');
+                this.startBtn = document.getElementById('startBtn');
+                this.mouthIndicator = document.getElementById('mouthIndicator');
+                this.currentStageElement = document.getElementById('currentStage');
+                this.stageTargetElement = document.getElementById('stageTarget');
+                this.progressFillElement = document.getElementById('progressFill');
+                this.livesRemainingElement = document.getElementById('livesRemaining');
+                this.gameInfoModal = document.getElementById('gameInfoModal');
+                this.gameInstructions = document.getElementById('gameInstructions');
+                this.livesInfo = document.getElementById('livesInfo');
+                
+                this.score = 0;
+                this.gameRunning = false;
+                this.cookies = [];
+                this.faceLandmarks = [];
+                this.isMouthOpen = false;
+                this.faceMesh = null;
+                this.camera = null;
+                this.droppedCookies = 0;
+                this.maxDroppedCookies = 15;
+                
+                // Staging system
+                this.currentStage = 1;
+                this.maxStage = 5;
+                this.stageProgress = 0;
+                this.baseSpawnRate = 1500;
+                
+                
+                // Stage configuration: [target cookies, fixed speed, spawn rate multiplier, cookies per spawn]
+                this.stageConfig = {
+                    1: { target: 10, speed: 2.0, spawnMultiplier: 1.0, cookiesPerSpawn: 1 },
+                    2: { target: 15, speed: 3.0, spawnMultiplier: 0.8, cookiesPerSpawn: 2 },
+                    3: { target: 20, speed: 4.5, spawnMultiplier: 0.6, cookiesPerSpawn: 2 },
+                    4: { target: 25, speed: 6.0, spawnMultiplier: 0.5, cookiesPerSpawn: 3 },
+                    5: { target: 30, speed: 8.0, spawnMultiplier: 0.4, cookiesPerSpawn: 3 }
+                };
+                
+                // Cookie image path - replace this with your PNG file path
+                this.cookieImagePath = 'static/cookies.png'; // UPDATE THIS PATH
+
+                // Key mouth landmark indices for MediaPipe Face Mesh
+                this.mouthLandmarkIndices = {
+                    upperLip: [13, 14, 15, 16, 17, 18],
+                    lowerLip: [404, 405, 320, 307, 375, 321],
+                    innerMouth: [78, 81, 13, 311, 308, 415, 324, 318]
+                };
+                this.startBtn.disabled = true;
+                
+                this.init();
+            }
+            
+       
+
+                async init() {
+                this.statusElement.textContent = "Initializing camera...";
+                await this.setupCamera();
+                this.statusElement.textContent = "Loading face detection...";
+                await this.setupFaceMesh();
+                this.setupEventListeners();
+                this.resizeCanvas();
+                this.startBtn.disabled = false;
+
+                // Wait for 5 seconds before hiding the loading screen
+                setTimeout(() => {
+                    document.getElementById("loadingScreen").style.display = "none";
+                    this.startBtn.style.display = "inline-block";
+                    this.statusElement.textContent = "Ready! Click Start Game";
+                    this.gameInstructions.textContent = "Open your mouth wide to catch cookies! Complete stage targets to advance.";
+                }, 5000); // 5000 milliseconds = 5 seconds
+            }
+            async setupCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            facingMode: 'user'
+                        }
+                    });
+                    this.video.srcObject = stream;
+                    
+                    return new Promise((resolve) => {
+                        this.video.onloadedmetadata = () => {
+                            resolve();
+                        };
+                    });
+                } catch (err) {
+                    this.statusElement.textContent = "Camera access denied!";
+                    console.error("Camera error:", err);
+                }
+            }
+
+            async setupFaceMesh() {
+                try {
+                    this.faceMesh = new FaceMesh({
+                        locateFile: (file) => {
+                            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                        }
+                    });
+
+                    this.faceMesh.setOptions({
+                        maxNumFaces: 1,
+                        refineLandmarks: false,
+                        minDetectionConfidence: 0.7,
+                        minTrackingConfidence: 0.7
+                    });
+
+                    this.faceMesh.onResults((results) => {
+                        this.onResults(results);
+                    });
+
+                    this.camera = new Camera(this.video, {
+                        onFrame: async () => {
+                            await this.faceMesh.send({ image: this.video });
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                } catch (error) {
+                    console.error("Face mesh setup error:", error);
+                    this.statusElement.textContent = "Face detection failed to load";
+                }
+            }
+
+            onResults(results) {
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                    this.faceLandmarks = results.multiFaceLandmarks[0];
+                    this.detectMouthState();
+                    this.drawFaceIndicators();
+                } else {
+                    this.isMouthOpen = false;
+                    this.updateMouthIndicator();
+                }
+
+                if (this.gameRunning) {
+                    this.updateGame();
+                }
+            }
+
+            detectMouthState() {
+                if (!this.faceLandmarks || this.faceLandmarks.length < 468) {
+                    this.isMouthOpen = false;
+                    this.updateMouthIndicator();
+                    return;
+                }
+
+                // Calculate mouth opening by measuring vertical distances
+                const upperLip = this.faceLandmarks[13]; // Top of upper lip
+                const lowerLip = this.faceLandmarks[14]; // Bottom of lower lip
+                const leftCorner = this.faceLandmarks[61]; // Left mouth corner
+                const rightCorner = this.faceLandmarks[291]; // Right mouth corner
+
+                if (upperLip && lowerLip && leftCorner && rightCorner) {
+                    // Calculate mouth height and width
+                    const mouthHeight = Math.abs(upperLip.y - lowerLip.y);
+                    const mouthWidth = Math.abs(leftCorner.x - rightCorner.x);
+                    
+                    // Mouth is considered open if height/width ratio exceeds threshold
+                    const aspectRatio = mouthHeight / mouthWidth;
+                    this.isMouthOpen = aspectRatio > 0.04; // Adjust this threshold as needed
+                }
+
+                this.updateMouthIndicator();
+            }
+
+            updateMouthIndicator() {
+                if (this.isMouthOpen) {
+                    this.mouthIndicator.textContent = "Mouth Open!";
+                    this.mouthIndicator.className = "mouth-indicator mouth-open";
+                } else {
+                    this.mouthIndicator.textContent = "Mouth Closed";
+                    this.mouthIndicator.className = "mouth-indicator mouth-closed";
+                }
+            }
+
+            drawFaceIndicators() {
+                if (!this.faceLandmarks) return;
+
+                // Draw mouth outline
+                const color = this.isMouthOpen ? '#32CD32' : '#FF6347';
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = 2;
+                this.ctx.fillStyle = color + '40';
+
+                // Draw mouth region
+                this.ctx.beginPath();
+                const mouthIndices = [...this.mouthLandmarkIndices.upperLip, ...this.mouthLandmarkIndices.lowerLip];
+                
+                mouthIndices.forEach((index, i) => {
+                    const landmark = this.faceLandmarks[index];
+                    if (landmark) {
+                        const x = (1 - landmark.x) * this.canvas.width; // Mirror for selfie view
+                        const y = landmark.y * this.canvas.height;
+                        
+                        if (i === 0) {
+                            this.ctx.moveTo(x, y);
+                        } else {
+                            this.ctx.lineTo(x, y);
+                        }
+                    }
+                });
+                
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+
+            setupEventListeners() {
+                this.startBtn.addEventListener('click', () => {
+                    if (!this.gameRunning) {
+                        this.startGame();
+                    } else {
+                        this.stopGame();
+                    }
+                });
+
+                window.addEventListener('resize', () => {
+                    this.resizeCanvas();
+                });
+            }
+
+            resizeCanvas() {
+                this.canvas.width = this.video.offsetWidth || 640;
+                this.canvas.height = this.video.offsetHeight || 480;
+            }
+
+            startGame() {
+                if (!this.faceMesh) {
+                    this.statusElement.textContent = "Please wait for face detection to load";
+                    return;
+                }
+
+                this.gameRunning = true;
+                this.score = 0;
+                this.currentStage = 1;
+                this.stageProgress = 0;
+                this.droppedCookies = 0;
+                this.cookies = [];
+                this.updateUI();
+                this.startBtn.textContent = "Stop Game";
+                this.startBtn.style.background = "linear-gradient(45deg, #DC143C, #B22222)";
+                
+                // Hide the center modal when game starts
+                this.gameInfoModal.style.display = "none";
+                
+                if (this.camera) {
+                    this.camera.start();
+                }
+                
+                this.spawnCookies();
+            }
+
+            stopGame() {
+                this.gameRunning = false;
+                this.clearCookies();
+                this.startBtn.textContent = "Start Game";
+                this.startBtn.style.background = "linear-gradient(45deg, #32CD32, #228B22)";
+                
+                // Show the center modal when game stops
+                this.gameInfoModal.style.display = "block";
+                this.statusElement.textContent = `Game over! Final score: ${this.score} (Stage ${this.currentStage})`;
+                this.gameInstructions.textContent = "Thanks for playing! Click Start Game to try again.";
+            }
+
+            updateUI() {
+                this.scoreElement.textContent = this.score;
+                this.currentStageElement.textContent = this.currentStage;
+                this.stageTargetElement.textContent = this.stageConfig[this.currentStage].target;
+                this.livesRemainingElement.textContent = this.maxDroppedCookies - this.droppedCookies;
+                
+                // Update progress bar
+                const progressPercent = (this.stageProgress / this.stageConfig[this.currentStage].target) * 100;
+                this.progressFillElement.style.width = Math.min(progressPercent, 100) + '%';
+                
+                // Change lives color based on remaining lives
+                const livesRemaining = this.maxDroppedCookies - this.droppedCookies;
+                if (livesRemaining <= 5) {
+                    this.livesInfo.style.color = '#FF0000'; // Red when low
+                } else if (livesRemaining <= 10) {
+                    this.livesInfo.style.color = '#FF8C00'; // Orange when medium
+                } else {
+                    this.livesInfo.style.color = '#32CD32'; // Green when high
+                }
+            }
+
+            checkStageProgression() {
+                const currentStageConfig = this.stageConfig[this.currentStage];
+                
+                if (this.stageProgress >= currentStageConfig.target) {
+                    if (this.currentStage < this.maxStage) {
+                        // Advance to next stage
+                        this.currentStage++;
+                        this.stageProgress = 0;
+                        this.updateUI();
+                        this.showStageAdvancement();
+                    } else {
+                        // Game completed!
+                        this.gameCompleted();
+                    }
+                }
+            }
+
+            showStageAdvancement() {
+                const currentConfig = this.stageConfig[this.currentStage];
+                this.statusElement.textContent = `🎉 STAGE ${this.currentStage}! Speed increased! ${currentConfig.cookiesPerSpawn} cookies per spawn!`;
+                this.gameInstructions.textContent = `Target: ${currentConfig.target} cookies. Speed: ${currentConfig.speed}px/frame. Get ready!`;
+                
+                // Flash the stage info
+                this.currentStageElement.parentElement.style.animation = 'none';
+                setTimeout(() => {
+                    this.currentStageElement.parentElement.style.animation = 'pulse 0.6s ease-in-out';
+                }, 10);
+            }
+
+            gameCompleted() {
+                this.gameRunning = false;
+                this.clearCookies();
+                
+                // Show the center modal when game is completed
+                this.gameInfoModal.style.display = "block";
+                this.statusElement.textContent = `🏆 CONGRATULATIONS! All stages completed!`;
+                this.gameInstructions.textContent = `Amazing! You finished all 5 stages with a final score of ${this.score} cookies!`;
+                this.startBtn.textContent = "Play Again";
+                this.startBtn.style.background = "linear-gradient(45deg, #FFD700, #FFA500)";
+            }
+
+            gameOver() {
+                this.gameRunning = false;
+                this.clearCookies();
+                
+                // Show the center modal when game is over
+                this.gameInfoModal.style.display = "block";
+                this.statusElement.textContent = `💥 GAME OVER! Too many cookies dropped!`;
+                this.gameInstructions.textContent = `You dropped ${this.maxDroppedCookies} cookies. Final score: ${this.score} (Stage ${this.currentStage})`;
+                this.startBtn.textContent = "Try Again";
+                this.startBtn.style.background = "linear-gradient(45deg, #FF4500, #FF6347)";
+            }
+
+            clearCookies() {
+                this.cookies.forEach(cookie => {
+                    if (cookie.element && cookie.element.parentNode) {
+                        cookie.element.parentNode.removeChild(cookie.element);
+                    }
+                });
+                this.cookies = [];
+            }
+
+            spawnCookies() {
+                if (!this.gameRunning) return;
+
+                const currentConfig = this.stageConfig[this.currentStage];
+                
+                // All cookies in the same stage have the same fixed speed
+                const cookieSpeed = currentConfig.speed;
+                const cookiesPerSpawn = currentConfig.cookiesPerSpawn;
+
+                // Create multiple cookies based on stage
+                for (let i = 0; i < cookiesPerSpawn; i++) {
+                    // Add some spacing between multiple cookies spawned at once
+                    const spawnDelay = i * 200; // 200ms delay between each cookie in a batch
+                    
+                    setTimeout(() => {
+                        if (!this.gameRunning) return; // Check if game is still running
+                        
+                        const cookie = {
+                            x: Math.random() * (this.canvas.width - 80) + 10,
+                            y: -70,
+                            speed: cookieSpeed, // Fixed speed for all cookies in this stage
+                            element: this.createCookieElement()
+                        };
+                        
+                        this.cookies.push(cookie);
+                    }, spawnDelay);
+                }
+
+                // Schedule next cookie spawn batch with stage-based spawn rate
+                const spawnDelay = this.baseSpawnRate * currentConfig.spawnMultiplier + (Math.random() * 500);
+                setTimeout(() => {
+                    this.spawnCookies();
+                }, spawnDelay);
+            }
+
+            createCookieElement() {
+                const cookieEl = document.createElement('div');
+                cookieEl.className = 'cookie';
+                
+                // Set the background image to your PNG file
+                cookieEl.style.backgroundImage = `url('${this.cookieImagePath}')`;
+                
+                // Remove any default background styling
+                cookieEl.style.backgroundColor = 'transparent';
+                cookieEl.style.border = 'none';
+                cookieEl.style.borderRadius = '0';
+                
+                document.querySelector('.game-container').appendChild(cookieEl);
+                return cookieEl;
+            }
+
+            updateGame() {
+                for (let i = this.cookies.length - 1; i >= 0; i--) {
+                    const cookie = this.cookies[i];
+                    cookie.y += cookie.speed;
+
+                    // Update cookie visual position
+                    if (cookie.element) {
+                        cookie.element.style.left = cookie.x + 'px';
+                        cookie.element.style.top = cookie.y + 'px';
+                    }
+
+                    // Check for mouth collision
+                    if (this.isMouthOpen && this.checkCookieCollision(cookie)) {
+                        this.score++;
+                        this.stageProgress++;
+                        this.updateUI();
+                        this.checkStageProgression();
+                        
+                        // Remove cookie element
+                        if (cookie.element && cookie.element.parentNode) {
+                            cookie.element.parentNode.removeChild(cookie.element);
+                        }
+                        this.cookies.splice(i, 1);
+                        continue;
+                    }
+
+                    // Remove cookies that have fallen off screen
+                    if (cookie.y > this.canvas.height + 50) {
+                        this.droppedCookies++;
+                        this.updateUI();
+                        
+                        // Check if game over due to too many dropped cookies
+                        if (this.droppedCookies >= this.maxDroppedCookies) {
+                            this.gameOver();
+                            return;
+                        }
+                        
+                        if (cookie.element && cookie.element.parentNode) {
+                            cookie.element.parentNode.removeChild(cookie.element);
+                        }
+                        this.cookies.splice(i, 1);
+                    }
+                }
+            }
+
+            checkCookieCollision(cookie) {
+                if (!this.faceLandmarks || !this.isMouthOpen) return false;
+
+                // Get mouth center from key landmarks
+                const mouthCenter = this.getMouthCenter();
+                if (!mouthCenter) return false;
+
+                // Calculate distance between cookie center and mouth center
+                const cookieCenterX = cookie.x + 40; // Cookie width/2 (80px/2)
+                const cookieCenterY = cookie.y + 40; // Cookie height/2 (80px/2)
+                
+                const distance = Math.sqrt(
+                    Math.pow(cookieCenterX - mouthCenter.x, 2) + 
+                    Math.pow(cookieCenterY - mouthCenter.y, 2)
+                );
+
+                return distance < 60; // Collision threshold
+            }
+
+            getMouthCenter() {
+                if (!this.faceLandmarks) return null;
+
+                const mouthIndices = [13, 14, 61, 291]; // Key mouth points
+                let centerX = 0, centerY = 0, validPoints = 0;
+
+                mouthIndices.forEach(index => {
+                    const landmark = this.faceLandmarks[index];
+                    if (landmark) {
+                        centerX += (1 - landmark.x) * this.canvas.width; // Mirror x coordinate
+                        centerY += landmark.y * this.canvas.height;
+                        validPoints++;
+                    }
+                });
+
+                if (validPoints === 0) return null;
+
+                return {
+                    x: centerX / validPoints,
+                    y: centerY / validPoints
+                };
+            }
+        }
+
+        // Initialize the game when the page loads
+        window.addEventListener('load', () => {
+            new CookieCatcherGame();
+        });
+    </script>
+</body>
+</html>
