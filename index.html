@@ -103,6 +103,52 @@
             width: 0%;
         }
 
+        .bomb {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            z-index: 10;
+            transition: all 0.1s ease;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        .score-popup {
+            position: fixed;
+            z-index: 100;
+            font-size: 32px;
+            font-weight: bold;
+            pointer-events: none;
+            animation: scorePopup 2s ease-out forwards;
+        }
+
+        .score-popup.positive {
+            color: #32CD32;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .score-popup.negative {
+            color: #FF0000;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        @keyframes scorePopup {
+            0% {
+                opacity: 1;
+                transform: translateY(0px) scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: translateY(-30px) scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-60px) scale(0.8);
+            }
+        }
+
+
         .lives-info {
             font-size: 14px;
             color: #DC143C;
@@ -753,6 +799,10 @@
                     5: { target: 30, speed: 8.0, spawnMultiplier: 0.4, cookiesPerSpawn: 3 }
                 };
                 
+                this.bombs = [];
+                this.bombImagePath = 'static/bomb.png'; // Add your bomb image path
+                this.bombSpawnChance = 0.20;
+
                 // Cookie image path - replace this with your PNG file path
                 this.cookieImagePath = 'static/cookies.png'; // UPDATE THIS PATH
 
@@ -973,6 +1023,7 @@
 
             stopGame() {
                 this.gameRunning = false;
+                 this.clearGameObjects(); 
                 this.clearCookies();
                 this.startBtn.textContent = "Start Game";
                 this.startBtn.style.background = "linear-gradient(45deg, #32CD32, #228B22)";
@@ -1076,30 +1127,102 @@
                 const cookiesPerSpawn = currentConfig.cookiesPerSpawn;
 
                 // Create multiple cookies based on stage
-                for (let i = 0; i < cookiesPerSpawn; i++) {
-                    // Add some spacing between multiple cookies spawned at once
-                    const spawnDelay = i * 200; // 200ms delay between each cookie in a batch
+                if (Math.random() < this.bombSpawnChance) {
+                    // Spawn a bomb
+                    const bomb = {
+                        x: Math.random() * (this.canvas.width - 100) + 10,
+                        y: -70,
+                        speed: currentConfig.speed * 0.8, // Bombs fall slightly slower
+                        element: this.createBombElement()
+                    };
                     
-                    setTimeout(() => {
-                        if (!this.gameRunning) return; // Check if game is still running
-                        
-                        const cookie = {
-                            x: Math.random() * (this.canvas.width - 80) + 10,
-                            y: -70,
-                            speed: cookieSpeed, // Fixed speed for all cookies in this stage
-                            element: this.createCookieElement()
-                        };
-                        
-                        this.cookies.push(cookie);
-                    }, spawnDelay);
-                }
+                    this.bombs.push(bomb);
+                } else {
+                    // Spawn cookies (existing logic)
+                    const cookieSpeed = currentConfig.speed;
+                    const cookiesPerSpawn = currentConfig.cookiesPerSpawn;
 
+                    for (let i = 0; i < cookiesPerSpawn; i++) {
+                        const spawnDelay = i * 200;
+                        
+                        setTimeout(() => {
+                            if (!this.gameRunning) return;
+                            
+                            const cookie = {
+                                x: Math.random() * (this.canvas.width - 80) + 10,
+                                y: -70,
+                                speed: cookieSpeed,
+                                element: this.createCookieElement()
+                            };
+                            
+                            this.cookies.push(cookie);
+                        }, spawnDelay);
+                    }
+                }
                 // Schedule next cookie spawn batch with stage-based spawn rate
                 const spawnDelay = this.baseSpawnRate * currentConfig.spawnMultiplier + (Math.random() * 500);
                 setTimeout(() => {
                     this.spawnCookies();
                 }, spawnDelay);
             }
+
+            createBombElement() {
+                const bombEl = document.createElement('div');
+                bombEl.className = 'bomb';
+                
+                // Set the background image to your bomb PNG file
+                bombEl.style.backgroundImage = `url('${this.bombImagePath}')`;
+                bombEl.style.backgroundColor = 'transparent';
+                bombEl.style.border = 'none';
+                bombEl.style.borderRadius = '0';
+                
+                document.querySelector('.game-container').appendChild(bombEl);
+                return bombEl;
+            }
+
+            checkBombCollision(bomb) {
+                if (!this.faceLandmarks || !this.isMouthOpen) return false;
+
+                const mouthCenter = this.getMouthCenter();
+                if (!mouthCenter) return false;
+
+                const bombCenterX = bomb.x + 50; // Bomb width/2 (100px/2)
+                const bombCenterY = bomb.y + 50; // Bomb height/2 (100px/2)
+                
+                const distance = Math.sqrt(
+                    Math.pow(bombCenterX - mouthCenter.x, 2) + 
+                    Math.pow(bombCenterY - mouthCenter.y, 2)
+                );
+
+                return distance < 70; // Slightly larger collision threshold for bombs
+            }
+
+            showScorePopup(points, x, y) {
+                const popup = document.createElement('div');
+                popup.className = `score-popup ${points > 0 ? 'positive' : 'negative'}`;
+                popup.textContent = points > 0 ? `+${points}` : `${points}`;
+                popup.style.left = x + 'px';
+                popup.style.top = y + 'px';
+                
+                document.body.appendChild(popup);
+                
+                // Remove popup after animation
+                setTimeout(() => {
+                    if (popup.parentNode) {
+                        popup.parentNode.removeChild(popup);
+                    }
+                }, 2000);
+            }
+
+            clearBombs() {
+                this.bombs.forEach(bomb => {
+                    if (bomb.element && bomb.element.parentNode) {
+                        bomb.element.parentNode.removeChild(bomb.element);
+                    }
+                });
+                this.bombs = [];
+            }
+
 
             createCookieElement() {
                 const cookieEl = document.createElement('div');
@@ -1117,25 +1240,39 @@
                 return cookieEl;
             }
 
+            clearGameObjects() {
+                // Clear cookies
+                this.cookies.forEach(cookie => {
+                    if (cookie.element && cookie.element.parentNode) {
+                        cookie.element.parentNode.removeChild(cookie.element);
+                    }
+                });
+                this.cookies = [];
+                
+                // Clear bombs
+                this.clearBombs();
+            }
+
             updateGame() {
+                // Update cookies (existing logic with score popup)
                 for (let i = this.cookies.length - 1; i >= 0; i--) {
                     const cookie = this.cookies[i];
                     cookie.y += cookie.speed;
 
-                    // Update cookie visual position
                     if (cookie.element) {
                         cookie.element.style.left = cookie.x + 'px';
                         cookie.element.style.top = cookie.y + 'px';
                     }
 
-                    // Check for mouth collision
                     if (this.isMouthOpen && this.checkCookieCollision(cookie)) {
                         this.score++;
                         this.stageProgress++;
                         this.updateUI();
                         this.checkStageProgression();
                         
-                        // Remove cookie element
+                        // Show +1 popup
+                        this.showScorePopup(1, cookie.x + 40, cookie.y + 40);
+                        
                         if (cookie.element && cookie.element.parentNode) {
                             cookie.element.parentNode.removeChild(cookie.element);
                         }
@@ -1143,12 +1280,10 @@
                         continue;
                     }
 
-                    // Remove cookies that have fallen off screen
                     if (cookie.y > this.canvas.height + 50) {
                         this.droppedCookies++;
                         this.updateUI();
                         
-                        // Check if game over due to too many dropped cookies
                         if (this.droppedCookies >= this.maxDroppedCookies) {
                             this.gameOver();
                             return;
@@ -1158,6 +1293,40 @@
                             cookie.element.parentNode.removeChild(cookie.element);
                         }
                         this.cookies.splice(i, 1);
+                    }
+                }
+
+                // Update bombs (new logic)
+                for (let i = this.bombs.length - 1; i >= 0; i--) {
+                    const bomb = this.bombs[i];
+                    bomb.y += bomb.speed;
+
+                    if (bomb.element) {
+                        bomb.element.style.left = bomb.x + 'px';
+                        bomb.element.style.top = bomb.y + 'px';
+                    }
+
+                    if (this.isMouthOpen && this.checkBombCollision(bomb)) {
+                        // Deduct 5 points from stage progress (but don't go below 0)
+                        this.stageProgress = Math.max(0, this.stageProgress - 5);
+                        this.updateUI();
+                        
+                        // Show -5 popup
+                        this.showScorePopup(-5, bomb.x + 50, bomb.y + 50);
+                        
+                        if (bomb.element && bomb.element.parentNode) {
+                            bomb.element.parentNode.removeChild(bomb.element);
+                        }
+                        this.bombs.splice(i, 1);
+                        continue;
+                    }
+
+                    // Remove bombs that have fallen off screen
+                    if (bomb.y > this.canvas.height + 50) {
+                        if (bomb.element && bomb.element.parentNode) {
+                            bomb.element.parentNode.removeChild(bomb.element);
+                        }
+                        this.bombs.splice(i, 1);
                     }
                 }
             }
